@@ -28,17 +28,37 @@ Bool FileExist(const char *strFilename){
 	return False;
 }
 
-/*
-void PrintError(FILE *file, const char *strMsgType, const char *strSymbol, const char *strMsg){
-printf("\n%s !! [%s] %s\n", strMsgType, strSymbol, strMsg);
-}
-*/
-
 void PrintError(FILE *file, const char *strMsg){
 	printf("\n%s\n", strMsg);
 
-	if (file == Null)
+	if (file != Null)
 		return;
+}
+
+void Dump(FILE *file){
+	char strBuf[_MAX_TOKEN_SIZE];
+	int i;
+	char ch;
+
+	if (file != Null){
+		i = 0;
+		while (fseek(file, -1, SEEK_CUR) == 0){
+			ch = fgetc(file);
+			fseek(file, -1, SEEK_CUR);
+			if (ch != '\n'){
+				strBuf[i++] = ch;
+			}
+			else{
+				break;
+			}
+		}
+
+		printf("\nDump last inteprted statement :\n");
+		while (--i >= 0){
+			printf("%c", strBuf[i]);
+		}
+		printf("\n");
+	}
 }
 
 Bool IsNumber(const char *strString){
@@ -164,13 +184,13 @@ Bool NextToken(FILE *file, char *strToken){
 				else{
 					if (strlen(strToken) > 0){
 						fseek(file, -1, SEEK_CUR);
-						PrintToken(strToken, "a");
+						PrintToken(strToken, _APPEND);
 						return True;
 					}
 					else{
 						strToken[iIndex] = ch;
 						strToken[iIndex + 1] = Null;
-						PrintToken(strToken, "a");
+						PrintToken(strToken, _APPEND);
 						return True;
 					}
 				}
@@ -182,7 +202,7 @@ Bool NextToken(FILE *file, char *strToken){
 				else{
 					strToken[iIndex] = ch;
 					strToken[iIndex + 1] = Null;
-					PrintToken(strToken, "a");
+					PrintToken(strToken, _APPEND);
 					return True;
 				}
 				break;
@@ -193,7 +213,7 @@ Bool NextToken(FILE *file, char *strToken){
 				else{
 					if (strlen(strToken) != 0){
 						strToken[iIndex] = Null;
-						PrintToken(strToken, "a");
+						PrintToken(strToken, _APPEND);
 						return True;
 					}
 				}
@@ -201,12 +221,12 @@ Bool NextToken(FILE *file, char *strToken){
 			case CR:
 				if (strlen(strToken) > 0){
 					fseek(file, -1, SEEK_CUR);
-					PrintToken(strToken, "a");
+					PrintToken(strToken, _APPEND);
 					return True;
 				}
 				else{
 					sprintf(strToken, "\n");
-					PrintToken(strToken, "a");
+					PrintToken(strToken, _APPEND);
 					return True;
 				}
 				break;
@@ -222,7 +242,7 @@ Bool NextToken(FILE *file, char *strToken){
 	}
 
 	if (strlen(strToken) > 0){
-		PrintToken(strToken, "a");
+		PrintToken(strToken, _APPEND);
 		return True;
 	}
 	else
@@ -279,7 +299,8 @@ Bool P_FILE(FILE *file){
 				bResult = P_NAL(strToken);
 				break;
 			case NAL_STRING_VARIBLE:
-				bResult = True;
+				PrintError(file, "Error!! No implement yet.");
+				bResult = False;
 				break;
 			case NAL_CR:
 				PrintError(file, "Error!! No filename.");
@@ -505,6 +526,56 @@ Bool P_PRINT(FILE *file, int bPrintNewLine){
 	return bResult;
 }
 
+Bool P_JUMP(FILE *file){
+	char strToken[_MAX_TOKEN_SIZE];
+	Bool bResult;
+	NAL_Symbol sbTokenSymbol;
+
+	long iJumpIndex, iJumpCount;
+
+	bResult = False;
+	if (NextToken(file, strToken) == True){
+		sbTokenSymbol = IdentifyNalKeywordType(strToken);
+
+		switch (sbTokenSymbol){
+			case NAL_NUMBER:
+				bResult = True;
+				iJumpCount = strtol(strToken, NULL, 10);
+				rewind(file);
+				iJumpIndex = 0;
+				while (iJumpIndex < iJumpCount){
+					if (NextToken(file, strToken) == False){
+						bResult = False;
+						break;
+					}
+
+					if (IdentifyNalKeywordType(strToken) != NAL_CR)
+						iJumpIndex++;
+				}
+				break;
+			case NAL_NUMBER_VARIBLE:
+				PrintError(file, "Error!! No implement yet.");
+				bResult = False;
+				break;
+			case NAL_CR:
+				PrintError(file, "Error!! No JUMP number.");
+				bResult = False;
+				break;
+			default:
+				sprintf(g_strMsgBuffer, "Error!! '%s is not a valid number.'", strToken);
+				PrintError(file, g_strMsgBuffer);
+				bResult = False;
+				break;
+		}
+	}
+	else{
+		PrintError(file, "Error!! No filename.");
+		bResult = False;
+	}
+
+	return bResult;
+}
+
 Bool P_Block(FILE *file){
 	char strToken[_MAX_TOKEN_SIZE];
 	Bool bResult;
@@ -533,6 +604,12 @@ Bool P_Block(FILE *file){
 				break;
 			case NAL_NUMBER_VARIBLE:
 				bResult = P_AssignValue2Varible(file, strToken, NAL_NUMBER);
+				break;
+			case NAL_JUMP:
+				bResult = P_JUMP(file);
+				break;
+			case NAL_ABORT:
+				return Abort;
 				break;
 			default:
 				sprintf(g_strMsgBuffer, "Error!! Unexpected/Unknowen keyword '%s'.", strToken);
@@ -578,8 +655,14 @@ Bool P_NAL(char *strFilename){
 					break;
 			}
 
-			if (bResult == False)
+			if (bResult == False){
+				Dump(file);
 				break;
+			}
+
+			if (bResult == Abort){
+				break;
+			}
 		}
 	}
 
@@ -604,7 +687,7 @@ int main(int argc, char *argv[]){
 	g_NalTokens = mvm_init();
 	g_NalVaribles = mvm_init();
 
-	PrintToken("Begin debug >>>\n", "w");
+	PrintToken("Begin debug >>>\n", _NEW);
 
 	P_NAL(argv[1]);
 
