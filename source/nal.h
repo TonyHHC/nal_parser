@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <assert.h>
 
 /* define constants */
@@ -56,7 +57,7 @@ Bool IsNumber(const char *strString);
 Bool DecodeROT18(const char *strSource, char *strResult);
 ChracterType GetChType(char ch);
 NAL_Symbol IdentifyNalKeywordType(const char *strToken);
-Bool NextToken(FILE *file, char *strToken);
+NAL_Symbol NextToken(FILE *file, char *strToken);
 void PrintToken(char *strToken, const char *strMode);
 Bool NormalizeString(char *strLine, char chHeadTail);
 
@@ -68,4 +69,6 @@ Bool P_PRINT(FILE *file, int bPrintNewLine);
 Bool P_AssignValue2Varible(FILE *file, const char *strVaribleName, NAL_Symbol nsExpecedtValueType);
 Bool P_GetVaribleValue(FILE *file, const char *strVaribleName, char *strValue, NAL_Symbol *nsValueType);
 Bool P_Equal(FILE *file, char *strValue, NAL_Symbol *nsValueType);
-
+Bool P_JUMP(FILE *file);
+Bool P_INC(FILE *file);
+Bool P_RND(FILE *file);

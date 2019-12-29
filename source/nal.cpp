@@ -2,7 +2,7 @@
 #include "mvm.h"
 
 /* declare NAL delimiters */
-char g_cPreserveChar[] = { ',', '{', '}', '=', '+', '-', '*', '/' };
+char g_cPreserveChar[] = { ',', '{', '}', '=', '+', '-', '*', '/', '(', ')' };
 char g_cPreservePair[] = { '"', '#' };
 char g_cSpace[] = { ' ', '\t' };
 char g_cCR[] = { '\n' };
@@ -33,6 +33,13 @@ void PrintError(FILE *file, const char *strMsg){
 
 	if (file != Null)
 		return;
+}
+
+int GetRandom(){
+	int min = 0;
+	int max = 99;
+
+	return(rand() % (max - min + 1) + min);
 }
 
 void Dump(FILE *file){
@@ -81,7 +88,7 @@ Bool IsNumber(const char *strString){
 Bool DecodeROT18(const char *strSource, char *strResult){
 	unsigned i, j;
 	char ch;
-	int bMatch;
+	Bool bMatch;
 
 	for (i = 0; i < strlen(strSource); i++){
 		ch = strSource[i];
@@ -95,9 +102,7 @@ Bool DecodeROT18(const char *strSource, char *strResult){
 		}
 
 		if (bMatch == False){
-			sprintf(g_strMsgBuffer, "Error : Invalid ROT18 string '%s'\n", strSource);
-			PrintError(Null, g_strMsgBuffer);
-			return False;
+			strResult[i] = ch;
 		}
 	}
 	strResult[strlen(strSource)] = Null;
@@ -158,7 +163,7 @@ NAL_Symbol IdentifyNalKeywordType(const char *strToken){
 	return NAL_UNKNOW;
 }
 
-Bool NextToken(FILE *file, char *strToken){
+NAL_Symbol NextToken(FILE *file, char *strToken){
 	char ch;
 	int iIndex;
 	int iPair;
@@ -185,13 +190,13 @@ Bool NextToken(FILE *file, char *strToken){
 					if (strlen(strToken) > 0){
 						fseek(file, -1, SEEK_CUR);
 						PrintToken(strToken, _APPEND);
-						return True;
+						return IdentifyNalKeywordType(strToken);
 					}
 					else{
 						strToken[iIndex] = ch;
 						strToken[iIndex + 1] = Null;
 						PrintToken(strToken, _APPEND);
-						return True;
+						return IdentifyNalKeywordType(strToken);
 					}
 				}
 				break;
@@ -203,7 +208,7 @@ Bool NextToken(FILE *file, char *strToken){
 					strToken[iIndex] = ch;
 					strToken[iIndex + 1] = Null;
 					PrintToken(strToken, _APPEND);
-					return True;
+					return IdentifyNalKeywordType(strToken);
 				}
 				break;
 			case Space:
@@ -214,7 +219,7 @@ Bool NextToken(FILE *file, char *strToken){
 					if (strlen(strToken) != 0){
 						strToken[iIndex] = Null;
 						PrintToken(strToken, _APPEND);
-						return True;
+						return IdentifyNalKeywordType(strToken);
 					}
 				}
 				break;
@@ -222,12 +227,12 @@ Bool NextToken(FILE *file, char *strToken){
 				if (strlen(strToken) > 0){
 					fseek(file, -1, SEEK_CUR);
 					PrintToken(strToken, _APPEND);
-					return True;
+					return IdentifyNalKeywordType(strToken);
 				}
 				else{
 					sprintf(strToken, "\n");
 					PrintToken(strToken, _APPEND);
-					return True;
+					return IdentifyNalKeywordType(strToken);
 				}
 				break;
 			default:
@@ -243,10 +248,10 @@ Bool NextToken(FILE *file, char *strToken){
 
 	if (strlen(strToken) > 0){
 		PrintToken(strToken, _APPEND);
-		return True;
+		return IdentifyNalKeywordType(strToken);
 	}
 	else
-		return False;
+		return NAL_UNKNOW;
 }
 
 void PrintToken(char *strToken, const char *strMode){
@@ -290,9 +295,7 @@ Bool P_FILE(FILE *file){
 	NAL_Symbol sbTokenSymbol;
 
 	bResult = False;
-	if (NextToken(file, strToken) == True){
-		sbTokenSymbol = IdentifyNalKeywordType(strToken);
-
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
 		switch (sbTokenSymbol){
 			case NAL_STRING:
 				NormalizeString(strToken, '"');
@@ -329,8 +332,7 @@ Bool P_Equal(FILE *file, char *strValue, NAL_Symbol *nsValueType){
 	strValue[0] = Null;
 
 	bResult = False;
-	if (NextToken(file, strToken) == True){
-		sbTokenSymbol = IdentifyNalKeywordType(strToken);
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
 
 		strcpy(strValue, strToken);
 		*nsValueType = sbTokenSymbol;
@@ -412,15 +414,14 @@ Bool P_AssignValue2Varible(FILE *file, const char *strVaribleName, NAL_Symbol ns
 	char strValue[_MAX_TOKEN_SIZE];
 
 	bResult = False;
-	if (NextToken(file, strToken) == True){
-		sbTokenSymbol = IdentifyNalKeywordType(strToken);
-
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
 		switch (sbTokenSymbol){
 			case NAL_Equal:
 				bResult = P_Equal(file, strValue, &sbValueType);
 				if (bResult == True){
 					if ((nsExpecedtValueType == sbValueType) || (nsExpecedtValueType == NAL_STRING && sbValueType == NAL_STRING_VARIBLE) || (nsExpecedtValueType == NAL_NUMBER && sbValueType == NAL_NUMBER_VARIBLE)){
-						mvm_insert(g_NalVaribles, (char*)strVaribleName, strValue);
+						if (mvm_update(g_NalVaribles, (char*)strVaribleName, strValue) == Null)
+							mvm_insert(g_NalVaribles, (char*)strVaribleName, strValue);
 					}
 					else {
 						bResult = False;
@@ -457,10 +458,21 @@ Bool P_PRINT(FILE *file, int bPrintNewLine){
 	NAL_Symbol nsValueType;
 
 	bResult = False;
-	if (NextToken(file, strToken) == True){
-		sbTokenSymbol = IdentifyNalKeywordType(strToken);
-
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
 		switch (sbTokenSymbol){
+			case NAL_ROT18:
+				NormalizeString(strToken, '#');
+				if ((bResult = DecodeROT18(strToken, strValue)) == True){
+					if (bPrintNewLine)
+						printf("%s\n", strValue);
+					else
+						printf("%s", strValue);
+				}
+				else{
+					sprintf(g_strMsgBuffer, "Error!! Cannot decode ROT18 string #%s#.", strToken);
+					PrintError(file, g_strMsgBuffer);
+				}
+				break;
 			case NAL_STRING:
 				NormalizeString(strToken, '"');
 				if (bPrintNewLine)
@@ -534,9 +546,7 @@ Bool P_JUMP(FILE *file){
 	long iJumpIndex, iJumpCount;
 
 	bResult = False;
-	if (NextToken(file, strToken) == True){
-		sbTokenSymbol = IdentifyNalKeywordType(strToken);
-
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
 		switch (sbTokenSymbol){
 			case NAL_NUMBER:
 				bResult = True;
@@ -544,7 +554,7 @@ Bool P_JUMP(FILE *file){
 				rewind(file);
 				iJumpIndex = 0;
 				while (iJumpIndex < iJumpCount){
-					if (NextToken(file, strToken) == False){
+					if (NextToken(file, strToken) == NAL_UNKNOW){
 						bResult = False;
 						break;
 					}
@@ -576,25 +586,99 @@ Bool P_JUMP(FILE *file){
 	return bResult;
 }
 
+Bool P_INC(FILE *file){
+	char strToken[_MAX_TOKEN_SIZE];
+	Bool bResult;
+	NAL_Symbol sbTokenSymbol;
+
+	char strValue[_MAX_TOKEN_SIZE];
+	NAL_Symbol nsValueType;
+
+	long iValue;
+
+	bResult = False;
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_L_Parentheses){
+		PrintError(file, "Error!! INC expect '('.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) == NAL_NUMBER_VARIBLE){
+		if (P_GetVaribleValue(file, strToken, strValue, &nsValueType) == True){
+			if (nsValueType == NAL_NUMBER){
+				iValue = strtol(strValue, NULL, 10);
+				iValue++;
+				sprintf(strValue, "%i", iValue);
+				mvm_update(g_NalVaribles, (char*)strToken, strValue);
+				bResult = True;
+			}
+		}
+	}
+	else{
+		PrintError(file, "Error!! INC expect a number varible.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_R_Parentheses){
+		PrintError(file, "Error!! INC expect ')'.");
+		return False;
+	}
+
+	return bResult;
+}
+
+Bool P_RND(FILE *file){
+	char strToken[_MAX_TOKEN_SIZE];
+	Bool bResult;
+	NAL_Symbol sbTokenSymbol;
+
+	char strValue[_MAX_TOKEN_SIZE];
+
+	int iValue;
+
+	bResult = False;
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_L_Parentheses){
+		PrintError(file, "Error!! RND expect '('.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) == NAL_NUMBER_VARIBLE){
+		iValue = GetRandom();
+		sprintf(strValue, "%i", iValue);
+		if (mvm_update(g_NalVaribles, (char*)strToken, strValue) == NULL)
+			mvm_insert(g_NalVaribles, (char*)strToken, strValue);
+		bResult = True;
+	}
+	else{
+		PrintError(file, "Error!! RND expect a number varible.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_R_Parentheses){
+		PrintError(file, "Error!! RND expect ')'.");
+		return False;
+	}
+
+	return bResult;
+}
+
 Bool P_Block(FILE *file){
 	char strToken[_MAX_TOKEN_SIZE];
 	Bool bResult;
 	NAL_Symbol sbTokenSymbol;
 
-	while (NextToken(file, strToken) == True){
-		sbTokenSymbol = IdentifyNalKeywordType(strToken);
-
+	while ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
+		bResult = False;
 		switch (sbTokenSymbol){
 			case NAL_CR:
+				bResult = True;
 				break;
 			case NAL_PRINT:
 				bResult = P_PRINT(file, True);
 				break;
 			case NAL_PRINTN:
 				bResult = P_PRINT(file, False);
-				break;
-			case NAL_R_Braces:
-				return True;
 				break;
 			case NAL_FILE:
 				bResult = P_FILE(file);
@@ -610,6 +694,12 @@ Bool P_Block(FILE *file){
 				break;
 			case NAL_ABORT:
 				return Abort;
+				break;
+			case NAL_INC:
+				bResult = P_INC(file);
+				break;
+			case NAL_RND:
+				bResult = P_RND(file);
 				break;
 			default:
 				sprintf(g_strMsgBuffer, "Error!! Unexpected/Unknowen keyword '%s'.", strToken);
@@ -639,9 +729,7 @@ Bool P_NAL(char *strFilename){
 
 	file = fopen(strFilename, "rb");
 	{
-		while (NextToken(file, strToken) == True){
-			sbTokenSymbol = IdentifyNalKeywordType(strToken);
-
+		while ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
 			bResult = True;
 			switch (sbTokenSymbol){
 				case NAL_CR:
@@ -686,6 +774,8 @@ int main(int argc, char *argv[]){
 
 	g_NalTokens = mvm_init();
 	g_NalVaribles = mvm_init();
+
+	srand((unsigned)time(NULL));
 
 	PrintToken("Begin debug >>>\n", _NEW);
 
