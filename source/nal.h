@@ -7,9 +7,11 @@
 #define _MAX_FILENAME_LENGTH 255
 #define _MAX_TOKEN_SIZE 500
 #define Null 0
+#define _APPEND "a"
+#define _NEW "w"
 
 typedef enum{
-	False, True
+	False, True, Abort
 } Bool;
 
 /* define enum */
@@ -48,6 +50,7 @@ typedef enum{
 
 /* common function */
 void PrintError(FILE *file, const char *strMsg);
+void Dump(FILE *file);
 Bool FileExist(const char *strFilename);
 Bool IsNumber(const char *strString);
 Bool DecodeROT18(const char *strSource, char *strResult);
