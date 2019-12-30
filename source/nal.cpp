@@ -12,7 +12,6 @@ char g_strPlain[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456
 char g_strROT18[] = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm5678901234";
 
 /* declare mvm */
-mvm *g_NalTokens;
 mvm *g_NalVaribles;
 
 /* declare print message buffer */
@@ -28,11 +27,69 @@ Bool FileExist(const char *strFilename){
 	return False;
 }
 
+void NalPrint(char *strString, Bool bNewLine){
+	char *p;
+
+	p = strString;
+	for (; *p; ++p) {
+		if (*p == '\\'){
+			++p;
+			switch (*p){
+				case '0':
+					putchar('\0');
+					break;
+				case 'n':
+					putchar('\n');
+					break;
+				case 'r':
+					putchar('\r');
+					break;
+				case 't':
+					putchar('\t');
+					break;
+				case 'b':
+					putchar('\b');
+					break;
+				case 'a':
+					putchar('\a');
+					break;
+				case '\\':
+					putchar('\\');
+					break;
+				case '\'':
+					putchar('\'');
+					break;
+				case '\"':
+					putchar('\"');
+					break;
+				default:
+					putchar(*p);
+			}
+		}
+		else
+			putchar(*p);
+	}
+
+	if (bNewLine)
+		putchar('\n');
+}
+
 void PrintError(FILE *file, const char *strMsg){
 	printf("\n%s\n", strMsg);
 
 	if (file != Null)
 		return;
+}
+
+int DecimalPoint(char *strValue){
+	int i, iCount;
+
+	for (i = strlen(strValue) - 1, iCount = 0; i >= 0; i--, ++iCount){
+		if (strValue[i] == '.')
+			return iCount;
+	}
+
+	return 0;
 }
 
 int GetRandom(){
@@ -137,7 +194,7 @@ ChracterType GetChType(char ch){
 }
 
 NAL_Symbol IdentifyNalKeywordType(const char *strToken){
-
+	if (strcmp(strToken, ",") == 0) return NAL_Comma;
 	if (strcmp(strToken, "=") == 0) return NAL_Equal;
 	if (strcmp(strToken, "\n") == 0) return NAL_CR;
 	if (strcmp(strToken, "{") == 0) return NAL_L_Braces;
@@ -155,8 +212,10 @@ NAL_Symbol IdentifyNalKeywordType(const char *strToken){
 	if (strcmp(strToken, "RND") == 0) return NAL_RND;
 	if (strcmp(strToken, "INC") == 0) return NAL_INC;
 	if (strcmp(strToken, "INNUM") == 0) return NAL_INNUM;
+	if (strcmp(strToken, "IN2STR") == 0) return NAL_IN2STR;
 	if (strcmp(strToken, "IFGREATER") == 0) return NAL_IFGREATER;
 	if (strcmp(strToken, "IFEQUAL") == 0) return NAL_IFEQUAL;
+	if (strcmp(strToken, "INSTRS") == 0) return NAL_INSTRS;
 	if (strcmp(strToken, "JUMP") == 0) return NAL_JUMP;
 	if (strcmp(strToken, "ABORT") == 0) return NAL_ABORT;
 
@@ -259,8 +318,6 @@ void PrintToken(char *strToken, const char *strMode){
 	file = fopen("debug.txt", strMode);
 	fprintf(file, " %s", strToken);
 	fclose(file);
-
-	/*mvm_insert(g_NalTokens, strToken, "n/a");*/
 }
 
 /* change "AAA" to AAA  (delete char'"') */
@@ -287,6 +344,18 @@ Bool NormalizeString(char *strLine, char chHeadTail){
 	}
 
 	return False;
+}
+
+char *NormalizeValue(char *strValue, int iDecimalPlace){
+	float iValue;
+	char strFormat[10];
+
+	iValue = (float)(atof(strValue));
+
+	sprintf(strFormat, "%%015.%df", iDecimalPlace);
+	sprintf(strValue, strFormat, iValue);
+
+	return strValue;
 }
 
 Bool P_FILE(FILE *file){
@@ -333,19 +402,34 @@ Bool P_Equal(FILE *file, char *strValue, NAL_Symbol *nsValueType){
 
 	bResult = False;
 	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
-
-		strcpy(strValue, strToken);
-		*nsValueType = sbTokenSymbol;
-
 		switch (sbTokenSymbol){
 			case NAL_STRING:
 			case NAL_NUMBER:
-			case NAL_STRING_VARIBLE:
-			case NAL_NUMBER_VARIBLE:
+				strcpy(strValue, strToken);
+				*nsValueType = sbTokenSymbol;
 				bResult = True;
 				break;
+			case NAL_STRING_VARIBLE:
+			case NAL_NUMBER_VARIBLE:
+				if ((bResult = P_GetVaribleValue(file, strToken, strValue, nsValueType)) == True){
+					bResult = True;
+				}
+				else{
+					sprintf(g_strMsgBuffer, "Error!! Cannot get varible '%s' value.", strToken);
+					PrintError(file, g_strMsgBuffer);
+				}
+				break;
+			case NAL_ROT18:
+				NormalizeString(strToken, '#');
+				if ((bResult = DecodeROT18(strToken, strValue)) != True){
+					sprintf(g_strMsgBuffer, "Error!! Cannot decode ROT18 string #%s#.", strToken);
+					PrintError(file, g_strMsgBuffer);
+				}
+				*nsValueType = NAL_STRING;
+				break;
 			default:
-				bResult = False;
+				sprintf(g_strMsgBuffer, "Error!! '= %s' Syntax error.", strToken);
+				PrintError(file, g_strMsgBuffer);
 				break;
 		}
 	}
@@ -449,7 +533,7 @@ Bool P_AssignValue2Varible(FILE *file, const char *strVaribleName, NAL_Symbol ns
 	return bResult;
 }
 
-Bool P_PRINT(FILE *file, int bPrintNewLine){
+Bool P_PRINT(FILE *file, Bool bPrintNewLine){
 	char strToken[_MAX_TOKEN_SIZE];
 	Bool bResult;
 	NAL_Symbol sbTokenSymbol;
@@ -463,10 +547,7 @@ Bool P_PRINT(FILE *file, int bPrintNewLine){
 			case NAL_ROT18:
 				NormalizeString(strToken, '#');
 				if ((bResult = DecodeROT18(strToken, strValue)) == True){
-					if (bPrintNewLine)
-						printf("%s\n", strValue);
-					else
-						printf("%s", strValue);
+					NalPrint(strValue, bPrintNewLine);
 				}
 				else{
 					sprintf(g_strMsgBuffer, "Error!! Cannot decode ROT18 string #%s#.", strToken);
@@ -475,49 +556,16 @@ Bool P_PRINT(FILE *file, int bPrintNewLine){
 				break;
 			case NAL_STRING:
 				NormalizeString(strToken, '"');
-				if (bPrintNewLine)
-					printf("%s\n", strToken);
-				else
-					printf("%s", strToken);
-
+				NalPrint(strToken, bPrintNewLine);
 				bResult = True;
 				break;
 			case NAL_STRING_VARIBLE:
-				bResult = P_GetVaribleValue(file, strToken, strValue, &nsValueType);
-				if (bResult == True){
-					if (nsValueType == NAL_STRING){
-						NormalizeString(strValue, '"');
-						if (bPrintNewLine)
-							printf("%s\n", strValue);
-						else
-							printf("%s", strValue);
-					}
-					else {
-						bResult = False;
-					}
-				}
-
-				if (bResult == False){
-					sprintf(g_strMsgBuffer, "Error!! Cannot print value %s of varible %s.", strValue, strToken);
-					PrintError(file, g_strMsgBuffer);
-				}
-				break;
 			case NAL_NUMBER_VARIBLE:
-				bResult = P_GetVaribleValue(file, strToken, strValue, &nsValueType);
-				if (bResult == True){
-					if (nsValueType == NAL_NUMBER){
-						NormalizeString(strValue, '"');
-						if (bPrintNewLine)
-							printf("%s\n", strValue);
-						else
-							printf("%s", strValue);
-					}
-					else {
-						bResult = False;
-					}
+				if ((bResult = P_GetVaribleValue(file, strToken, strValue, &nsValueType)) == True){
+					NormalizeString(strValue, '"');
+					NalPrint(strValue, bPrintNewLine);
 				}
-
-				if (bResult == False){
+				else{
 					sprintf(g_strMsgBuffer, "Error!! Cannot print value %s of varible %s.", strValue, strToken);
 					PrintError(file, g_strMsgBuffer);
 				}
@@ -594,7 +642,9 @@ Bool P_INC(FILE *file){
 	char strValue[_MAX_TOKEN_SIZE];
 	NAL_Symbol nsValueType;
 
-	long iValue;
+	float iValue;
+	int iDecimalPlace;
+	char strFormat[10];
 
 	bResult = False;
 
@@ -606,9 +656,11 @@ Bool P_INC(FILE *file){
 	if ((sbTokenSymbol = NextToken(file, strToken)) == NAL_NUMBER_VARIBLE){
 		if (P_GetVaribleValue(file, strToken, strValue, &nsValueType) == True){
 			if (nsValueType == NAL_NUMBER){
-				iValue = strtol(strValue, NULL, 10);
-				iValue++;
-				sprintf(strValue, "%i", iValue);
+				iDecimalPlace = DecimalPoint(strValue);
+				iValue = (float)(atof(strValue));
+				iValue = iValue + 1;
+				sprintf(strFormat, "%%0.%df", iDecimalPlace);
+				sprintf(strValue, strFormat, iValue);
 				mvm_update(g_NalVaribles, (char*)strToken, strValue);
 				bResult = True;
 			}
@@ -663,53 +715,262 @@ Bool P_RND(FILE *file){
 	return bResult;
 }
 
-Bool P_Block(FILE *file){
+Bool P_INNUM(FILE *file){
 	char strToken[_MAX_TOKEN_SIZE];
 	Bool bResult;
 	NAL_Symbol sbTokenSymbol;
 
-	while ((sbTokenSymbol = NextToken(file, strToken)) != NAL_UNKNOW){
+	char strVar[_MAX_TOKEN_SIZE];
+	char strValue[_MAX_TOKEN_SIZE];
+
+	bResult = True;
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_L_Parentheses){
+		PrintError(file, "Error!! INNUM expect '('.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) == NAL_NUMBER_VARIBLE){
+		strcpy(strVar, strToken);
+	}
+	else{
+		PrintError(file, "Error!! INNUM expect a number varible.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_R_Parentheses){
+		PrintError(file, "Error!! INNUM expect ')'.");
+		return False;
+	}
+
+	do{
+		scanf("%s", strValue);
+		if (IsNumber(strValue)){
+			if (mvm_update(g_NalVaribles, (char*)strVar, strValue) == Null)
+				mvm_insert(g_NalVaribles, (char*)strVar, strValue);
+			break;
+		}
+		else{
+			sprintf(g_strMsgBuffer, "Sorry!! '%s' is not a number. Please input again.", strValue);
+			PrintError(file, g_strMsgBuffer);
+		}
+	} while (1);
+
+	return bResult;
+}
+
+Bool P_IN2STR(FILE *file){
+	char strToken[_MAX_TOKEN_SIZE];
+	Bool bResult;
+	NAL_Symbol sbTokenSymbol;
+
+	char strVar1[_MAX_TOKEN_SIZE], strVar2[_MAX_TOKEN_SIZE];
+	char strBuf[_MAX_TOKEN_SIZE];
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_L_Parentheses){
+		PrintError(file, "Error!! IN2STR expect '('.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strVar1)) != NAL_STRING_VARIBLE){
+		PrintError(file, "Error!! IN2STR param1 must be string varible.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_Comma){
+		PrintError(file, "Error!! IN2STR expect ','.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strVar2)) != NAL_STRING_VARIBLE){
+		PrintError(file, "Error!! IN2STR param2 must be string varible.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_R_Parentheses){
+		PrintError(file, "Error!! IN2STR expect ')'.");
+		return False;
+	}
+
+	printf("Please input string 1 :\n");
+	fgets(strToken, _MAX_TOKEN_SIZE, stdin);
+	if (strToken[strlen(strToken) - 1] == '\n')
+		strToken[strlen(strToken) - 1] = Null;
+	sprintf(strBuf, "\"%s\"", strToken);
+	if (mvm_update(g_NalVaribles, (char*)strVar1, strBuf) == Null)
+		mvm_insert(g_NalVaribles, (char*)strVar1, strBuf);
+
+	printf("Please input string 2 :\n");
+	fgets(strToken, _MAX_TOKEN_SIZE, stdin);
+	if (strToken[strlen(strToken) - 1] == '\n')
+		strToken[strlen(strToken) - 1] = Null;
+	sprintf(strBuf, "\"%s\"", strToken);
+	if (mvm_update(g_NalVaribles, (char*)strVar2, strBuf) == Null)
+		mvm_insert(g_NalVaribles, (char*)strVar2, strBuf);
+
+	bResult = True;
+
+	return bResult;
+}
+
+Bool P_IFCOND(FILE *file, NAL_Symbol nsIFCOND){
+	char strToken[_MAX_TOKEN_SIZE];
+	Bool bResult;
+	NAL_Symbol sbTokenSymbol;
+
+	char strValue1[_MAX_TOKEN_SIZE], strValue2[_MAX_TOKEN_SIZE];
+	NAL_Symbol nsValueType1, nsValueType2;
+
+	Bool bDo;
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_L_Parentheses){
+		PrintError(file, "Error!! IFCOND expect '('.");
+		return False;
+	}
+
+	if (P_Equal(file, strValue1, &nsValueType1) == False){
+		PrintError(file, "Error!! IFCOND param1 is not valid.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_Comma){
+		PrintError(file, "Error!! IFCOND expect ','.");
+		return False;
+	}
+
+	if (P_Equal(file, strValue2, &nsValueType2) == False){
+		PrintError(file, "Error!! IFCOND param2 is not valid.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_R_Parentheses){
+		PrintError(file, "Error!! IFCOND expect ')'.");
+		return False;
+	}
+
+	if (nsValueType1 != nsValueType2){
+		PrintError(file, "Error!! IFCOND param1 and param2 type are diffrent.");
+		return False;
+	}
+
+	if ((sbTokenSymbol = NextToken(file, strToken)) != NAL_L_Braces){
+		PrintError(file, "Error!! IFCOND expect '{'.");
+		return False;
+	}
+
+	if (nsValueType1 == NAL_NUMBER){
+		NormalizeValue(strValue1, 5);
+		NormalizeValue(strValue2, 5);
+	}
+	else{
+		NormalizeString(strValue1, '"');
+		NormalizeString(strValue2, '"');
+	}
+
+	bDo = True;
+	switch (nsIFCOND){
+		case NAL_IFGREATER:
+			bDo = False;
+			if (strcmp(strValue1, strValue2) > 0)
+				bDo = True;
+			break;
+		case NAL_IFEQUAL:
+			bDo = False;
+			if (strcmp(strValue1, strValue2) == 0)
+				bDo = True;
+			break;
+		case NAL_INSTRS:
+			bDo = False;
+			if (strstr(strValue1, strValue2) != NULL)
+				bDo = True;
+			break;
+		default:
+			break;
+	}
+
+	if (bDo == True)
+		bResult = P_Block(file, False);
+	else
+		bResult = P_Block(file, True);
+
+	return bResult;
+}
+
+Bool P_Block(FILE *file, Bool bSkipBlock){
+	char strToken[_MAX_TOKEN_SIZE];
+	Bool bResult;
+	NAL_Symbol sbTokenSymbol;
+
+	while (1){
+		sbTokenSymbol = NextToken(file, strToken);
+
 		bResult = False;
+
 		switch (sbTokenSymbol){
-			case NAL_CR:
+			case NAL_L_Braces:
+				bResult = P_Block(file, bSkipBlock);
+				break;
+			case NAL_R_Braces:
 				bResult = True;
-				break;
-			case NAL_PRINT:
-				bResult = P_PRINT(file, True);
-				break;
-			case NAL_PRINTN:
-				bResult = P_PRINT(file, False);
-				break;
-			case NAL_FILE:
-				bResult = P_FILE(file);
-				break;
-			case NAL_STRING_VARIBLE:
-				bResult = P_AssignValue2Varible(file, strToken, NAL_STRING);
-				break;
-			case NAL_NUMBER_VARIBLE:
-				bResult = P_AssignValue2Varible(file, strToken, NAL_NUMBER);
-				break;
-			case NAL_JUMP:
-				bResult = P_JUMP(file);
-				break;
-			case NAL_ABORT:
-				return Abort;
-				break;
-			case NAL_INC:
-				bResult = P_INC(file);
-				break;
-			case NAL_RND:
-				bResult = P_RND(file);
+				return True;
 				break;
 			default:
-				sprintf(g_strMsgBuffer, "Error!! Unexpected/Unknowen keyword '%s'.", strToken);
-				PrintError(file, g_strMsgBuffer);
-				bResult = False;
 				break;
 		}
 
-		if (bResult == False)
-			return False;
+		if (bSkipBlock == False){
+			switch (sbTokenSymbol){
+				case NAL_CR:
+					bResult = True;
+					break;
+				case NAL_PRINT:
+					bResult = P_PRINT(file, True);
+					break;
+				case NAL_PRINTN:
+					bResult = P_PRINT(file, False);
+					break;
+				case NAL_FILE:
+					bResult = P_FILE(file);
+					break;
+				case NAL_STRING_VARIBLE:
+					bResult = P_AssignValue2Varible(file, strToken, NAL_STRING);
+					break;
+				case NAL_NUMBER_VARIBLE:
+					bResult = P_AssignValue2Varible(file, strToken, NAL_NUMBER);
+					break;
+				case NAL_JUMP:
+					bResult = P_JUMP(file);
+					break;
+				case NAL_ABORT:
+					bResult = Abort;
+					break;
+				case NAL_INC:
+					bResult = P_INC(file);
+					break;
+				case NAL_RND:
+					bResult = P_RND(file);
+					break;
+				case NAL_IFGREATER:
+				case NAL_IFEQUAL:
+				case NAL_INSTRS:
+					bResult = P_IFCOND(file, sbTokenSymbol);
+					break;
+				case NAL_INNUM:
+					bResult = P_INNUM(file);
+					break;
+				case NAL_IN2STR:
+					bResult = P_IN2STR(file);
+					break;
+				default:
+					sprintf(g_strMsgBuffer, "Error!! Unexpected/Unknowen keyword '%s'.", strToken);
+					PrintError(file, g_strMsgBuffer);
+					bResult = False;
+					break;
+			}
+
+			if (bResult == False || bResult == Abort)
+				return bResult;
+		}
 	}
 
 	return False;
@@ -735,7 +996,7 @@ Bool P_NAL(char *strFilename){
 				case NAL_CR:
 					break;
 				case NAL_L_Braces:
-					bResult = P_Block(file);
+					bResult = P_Block(file, False);
 					break;
 				default:
 					bResult = False;
@@ -772,7 +1033,6 @@ int main(int argc, char *argv[]){
 		return False;
 	}
 
-	g_NalTokens = mvm_init();
 	g_NalVaribles = mvm_init();
 
 	srand((unsigned)time(NULL));
@@ -781,10 +1041,7 @@ int main(int argc, char *argv[]){
 
 	P_NAL(argv[1]);
 
-	/*mvm_print_2_console(g_NalTokens);*/
-
 	mvm_free(&g_NalVaribles);
-	mvm_free(&g_NalTokens);
 
 	printf("\n\n");
 

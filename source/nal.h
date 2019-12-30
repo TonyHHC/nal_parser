@@ -32,6 +32,7 @@ typedef enum{
 	NAL_R_Braces,		/* } */
 	NAL_L_Parentheses,	/* ( */
 	NAL_R_Parentheses,	/* ) */
+	NAL_Comma,			/* , */
 	NAL_FILE,			/* FILE */
 	NAL_PRINT,			/* PRINT */
 	NAL_PRINTN,			/* PRINTN */
@@ -43,8 +44,10 @@ typedef enum{
 	NAL_RND,			/* RND */
 	NAL_INC,			/* INC */
 	NAL_INNUM,			/* INNUM */
+	NAL_IN2STR,			/* IN2STR */
 	NAL_IFGREATER,		/* IFGREATER */
 	NAL_IFEQUAL,		/* IFEQUAL */
+	NAL_INSTRS,			/* INSTRS */
 	NAL_JUMP,			/* JUMP */
 	NAL_ABORT			/* ABORT */
 } NAL_Symbol;
@@ -60,15 +63,19 @@ NAL_Symbol IdentifyNalKeywordType(const char *strToken);
 NAL_Symbol NextToken(FILE *file, char *strToken);
 void PrintToken(char *strToken, const char *strMode);
 Bool NormalizeString(char *strLine, char chHeadTail);
+char *NormalizeValue(char *strValue, int iDecimalPlace);
 
 /* declare NAL function */
 Bool P_NAL(char *strFilename);
-Bool P_Block(FILE *file);
+Bool P_Block(FILE *file, Bool bSkipBlock);
 Bool P_FILE(FILE *file);
-Bool P_PRINT(FILE *file, int bPrintNewLine);
+Bool P_PRINT(FILE *file, Bool bPrintNewLine);
 Bool P_AssignValue2Varible(FILE *file, const char *strVaribleName, NAL_Symbol nsExpecedtValueType);
 Bool P_GetVaribleValue(FILE *file, const char *strVaribleName, char *strValue, NAL_Symbol *nsValueType);
 Bool P_Equal(FILE *file, char *strValue, NAL_Symbol *nsValueType);
 Bool P_JUMP(FILE *file);
 Bool P_INC(FILE *file);
 Bool P_RND(FILE *file);
+Bool P_INNUM(FILE *file);
+Bool P_IN2STR(FILE *file);
+Bool P_IFCOND(FILE *file, NAL_Symbol nsIFCOND);

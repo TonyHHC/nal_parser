@@ -8,8 +8,7 @@
 
 #define _PRINT_MVM_CONTENT_MAX_LENGTH 10000
 
-mvm* mvm_init(void)
-{
+mvm* mvm_init(void){
 	mvm *p = (mvm*)malloc(sizeof(mvm));
 
 	p->head = NULL;
@@ -18,16 +17,14 @@ mvm* mvm_init(void)
 	return p;
 }
 
-int mvm_size(mvm* m)
-{
+int mvm_size(mvm* m){
 	if (m == NULL)
 		return 0;
 
 	return m->numkeys;
 }
 
-void mvm_insert(mvm* m, char* key, char* data)
-{
+void mvm_insert(mvm* m, char* key, char* data){
 	mvmcell *old_head;
 	mvmcell *np;
 	char *new_key, *new_data;
@@ -47,12 +44,10 @@ void mvm_insert(mvm* m, char* key, char* data)
 	np->data = new_data;
 	np->next = NULL;
 
-	if (m->head == NULL)
-	{
+	if (m->head == NULL)	{
 		m->head = np;
 	}
-	else
-	{
+	else	{
 		old_head = m->head;
 		m->head = np;
 		np->next = old_head;
@@ -61,8 +56,7 @@ void mvm_insert(mvm* m, char* key, char* data)
 	m->numkeys++;
 }
 
-char* mvm_print(mvm* m)
-{
+char* mvm_print(mvm* m){
 	mvmcell *p;
 
 	char *strResult;
@@ -77,10 +71,8 @@ char* mvm_print(mvm* m)
 
 	p = m->head;
 
-	while (p != NULL)
-	{
-		if (p->key != NULL && p->data != NULL)
-		{
+	while (p != NULL)	{
+		if (p->key != NULL && p->data != NULL){
 			sprintf(strTmp, "[%s](%s) ", p->key, p->data);
 			strcat(strResult, strTmp);
 		}
@@ -90,8 +82,7 @@ char* mvm_print(mvm* m)
 	return strResult;
 }
 
-void mvm_print_2_console(mvm* m)
-{
+void mvm_print_2_console(mvm* m){
 	mvmcell *p;
 
 	if (m == NULL)
@@ -99,16 +90,37 @@ void mvm_print_2_console(mvm* m)
 
 	p = m->head;
 
-	while (p != NULL)
-	{
+	while (p != NULL){
 		if (p->key != NULL && p->data != NULL)
 			printf("[%s](%s)\n", p->key, p->data);
 		p = p->next;
 	}
 }
 
-void mvm_delete(mvm* m, char* key)
-{
+char* mvm_update(mvm* m, char* key, char* newdata){
+	mvmcell *p;
+	char *data;
+
+	p = m->head;
+
+	while (p != NULL){
+		if (strcmp(p->key, key) == 0){
+			free(p->data);
+
+			data = (char*)malloc(strlen(newdata) + 1);
+			strcpy(data, newdata);
+			p->data = data;
+
+			return p->data;
+		}
+
+		p = p->next;
+	}
+
+	return NULL;
+}
+
+void mvm_delete(mvm* m, char* key){
 	mvmcell *temp, *prev;
 	prev = NULL;
 
@@ -118,8 +130,7 @@ void mvm_delete(mvm* m, char* key)
 	temp = m->head;
 
 	/* if head*/
-	if (temp != NULL && strcmp(temp->key, key) == 0)
-	{
+	if (temp != NULL && strcmp(temp->key, key) == 0){
 		m->head = temp->next;
 		free(temp->key);
 		free(temp->data);
@@ -129,8 +140,7 @@ void mvm_delete(mvm* m, char* key)
 	}
 
 	/* if not head */
-	while (temp != NULL && strcmp(temp->key, key) != 0)
-	{
+	while (temp != NULL && strcmp(temp->key, key) != 0){
 		prev = temp;
 		temp = temp->next;
 	}
@@ -146,13 +156,11 @@ void mvm_delete(mvm* m, char* key)
 
 }
 
-char* mvm_search(mvm* m, char* key)
-{
+char* mvm_search(mvm* m, char* key){
 	mvmcell *p;
 	p = m->head;
 
-	while (p != NULL)
-	{
+	while (p != NULL){
 		if (strcmp(p->key, key) == 0)
 			return p->data;
 
@@ -162,16 +170,14 @@ char* mvm_search(mvm* m, char* key)
 	return NULL;
 }
 
-char** mvm_multisearch(mvm* m, char* key, int* n)
-{
+char** mvm_multisearch(mvm* m, char* key, int* n){
 	int iCount = 0;
 	char **c;
 	int iIndex = 0;
 
 	mvmcell *p;
 	p = m->head;
-	while (p != NULL)
-	{
+	while (p != NULL){
 		if (strcmp(p->key, key) == 0)
 			iCount++;
 
@@ -184,10 +190,8 @@ char** mvm_multisearch(mvm* m, char* key, int* n)
 	iIndex = 0;
 
 	p = m->head;
-	while (p != NULL)
-	{
-		if (strcmp(p->key, key) == 0)
-		{
+	while (p != NULL){
+		if (strcmp(p->key, key) == 0){
 			c[iIndex] = p->data;
 			iIndex++;
 		}
@@ -198,15 +202,13 @@ char** mvm_multisearch(mvm* m, char* key, int* n)
 	return(c);
 }
 
-void mvm_free(mvm** p)
-{
+void mvm_free(mvm** p){
 	mvmcell *current;
 	mvmcell *next;
 
 	current = (*p)->head;
 
-	while (current != NULL)
-	{
+	while (current != NULL){
 		next = current->next;
 		free(current->key);
 		free(current->data);
