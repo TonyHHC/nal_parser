@@ -64,7 +64,7 @@ INC ( %ABC )
 + Set a variable. All variables are GLOBAL, and persist across the use of FILE etc.
 ```
 $A = "Hello" or %B = 17.6
-<SET> := <VAR> "=" <VARCON> 
+<SET> := <VAR> "=" <VARCON> | <VAR>
 ```
   
 + Some helpful variable/constant rules
