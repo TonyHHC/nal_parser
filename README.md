@@ -73,8 +73,8 @@ $A = "Hello" or %B = 17.6
 <VARCON> := <VAR> | <CON>
 <VAR> := <STRVAR> | <NUMVAR>
 <CON> := <STRCON> | <NUMCON>
-<STRVAR> := $[A􀀀Z]+
-<NUMVAR> := %[A􀀀Z]+
+<STRVAR> := $[A-Z]+
+<NUMVAR> := %[A-Z]+
 <STRCON> := A plain text string in double quotes, e.g. "HELLO.TXT", or a ROT18 string in hashes e.g. #URYYB.GKG#
 <NUMCON> := A number e.g. 14.301
 ```
