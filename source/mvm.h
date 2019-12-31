@@ -34,6 +34,8 @@ char* mvm_print(mvm* m);
 void mvm_print_2_console(mvm* m);
 /* Update one key/value */
 char* mvm_update(mvm* m, char* key, char* newdata);
+/* Update one key/value, if cannot find key, then add it */
+void mvm_update_ext(mvm* m, char* key, char* newdata);
 /* Remove one key/value */
 void mvm_delete(mvm* m, char* key);
 /* Return the corresponding value for a key */
